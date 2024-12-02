@@ -1,7 +1,7 @@
 ### 前言
 在开发侧基于Git、Jenkis、Junit等工具构件了一个完善的CI（Continuous Integration持续集成）环境之后，CD（Continuous Delivery持续交付）往往成为下一个大问题。
 
-从系统集成测试，用户体验测试，预生产测试，到最后的线上发布都是不同的环境，很多配置都是环境相关的，一个配置有问题整个服务就work不起来。debug半天后发现要么是有人动了个文件，要么是有人动了项配置。程序员遇到这种问题的第一反应都是reset。在容器技术出来之前，重新部署服务是个很要命的事。
+从系统集成测试，用户体验测试，预生产测试，到最后的线上发布都是不同的环境，很多配置都是环境相关的，一个配置有问题整个服务就work不起来。debug半天后发现要么是有人动了个文件，要么是有人动了项配置。程序员遇到这种问题的第一反应都是reset。在容器技术出来之前，重新部署服务是个很要命的事。一杯茶，一包烟，一个配置一整天。
 
 Docker镜像 + K8s服务编排完美的解决了CD难题。
 Docker镜像解决了：一次打包哪里都能运行（是不是和Java口号很重合(￣▽￣)"），而K8s解决了：给我个镜像还你个Ready的服务。一切意思上的Ready。
@@ -271,5 +271,19 @@ kubectl logs POD
 ![docker-bridge.png](https://ping666.com/wp-content/uploads/2024/11/docker-bridge.png "docker-bridge.png")
 
 - K8s网络
+
+### Istio
+典型的微服务（比如Spring Cloud）都会集成以下几个核心功能：命名服务、配置服务和流控。K8S将这些通用的功能从业务微服务中剥离，部署成一个独立的容器服务SideCar，和业务微服务背靠背部署。
+
+Istio架构如下：
+![istio-architect.png](https://ping666.com/wp-content/uploads/2024/12/istio-architect.png "istio-architect.png")
+
+- 优势
+  - 命名服务、流控等通用逻辑对业务透明了，业务服务不需要再关注这些。这些工作将会交给DevOps工程师处理。
+  - 这一套通用逻辑从微服务下移到基础设施层之后，对各种语言写微服务更友好了。
+- 劣势
+  - 多了一层，增加了系统复杂度。
+  - 对DevOps工程师要求比较高，只有大平台才玩的起。
+  - 像Java这种成熟的语言，这些功能原本都是现成的，剥离后开发对服务的掌控力度在减弱。
 
 ### K8s API
