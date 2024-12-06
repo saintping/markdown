@@ -519,3 +519,7 @@ private class AppendBatcher {
 3. 配置中心 + 动态下发
   服务的配置文件application.properties中，只有一个业务相关的配置即配置中心的地址。其他业务配置全部从配置中心获取。
   服务启动时通过getConfig查询当前值，服务运行过程中通过addListener监听配置变更值。
+
+关于Spring boot3 + Nacos + Sentinel + 持久化的方案，参见这两个项目：
+[https://github.com/saintping/spring-cloud-3](https://github.com/saintping/spring-cloud-3)
+[https://github.com/saintping/Sentinel/tree/1.8/sentinel-dashboard](https://github.com/saintping/Sentinel/tree/1.8/sentinel-dashboard)

@@ -273,7 +273,9 @@ kubectl logs POD
 - K8s网络
 
 ### Istio
-典型的微服务（比如Spring Cloud）都会集成以下几个核心功能：命名服务、配置服务和流控。K8S将这些通用的功能从业务微服务中剥离，部署成一个独立的容器服务SideCar，和业务微服务背靠背部署。
+除了以上K8s + 镜像的部署方式之外。K8s还支持Service Mesh(服务网格)，其中istio是服务网格的一个主流实现。
+
+典型的微服务都会以组件的形式集成以下几个核心功能：命名服务、配置服务、负载均衡、熔断、监控。比如Spring Cloud就是Eureka、Ribbon、Hystrix、OpenTelemetry这些，Spring Cloud Alibaba大同小异，只是部分组件有替代Nacos、SpringCloudLoadbalancer、Sentinel、OpenTelemetry。服务网格将这些通用的功能从业务微服务中剥离，部署成一个独立的容器服务SideCar，一般和对应的业务微服务背靠背部署。
 
 Istio架构如下：
 ![istio-architect.png](https://ping666.com/wp-content/uploads/2024/12/istio-architect.png "istio-architect.png")
