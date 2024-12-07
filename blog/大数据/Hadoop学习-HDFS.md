@@ -137,3 +137,27 @@ hadoop只是一个bash脚本，-put对应的类是org.apache.hadoop.fs.shell.Cop
 1. 客户端命令执行完毕退出
 
 HDFS常用命令参见[https://hadoop.apache.org/docs/current/hadoop-project-dist/hadoop-common/FileSystemShell.html](https://hadoop.apache.org/docs/current/hadoop-project-dist/hadoop-common/FileSystemShell.html "https://hadoop.apache.org/docs/current/hadoop-project-dist/hadoop-common/FileSystemShell.html")
+
+### CEPH
+从上面可以看到HDFS的NameNode是有单点的，但是在Hadoop大文件、批处理场景下，这个单点问题不是特别严重。所以在面向C端用户的高并发大量小文件场景，一般都使用类似CEPH的分布式文件系统。
+[https://docs.ceph.com/en/latest](https://docs.ceph.com/en/latest "https://docs.ceph.com/en/latest")
+
+CEPH核心数据结构如下：
+![https://ping666.com/wp-content/uploads/2024/12/ceph-crush.png](https://ping666.com/wp-content/uploads/2024/12/ceph-crush.png "ceph-crush.png")
+
+- File和HDFS里的File是一个概念，都是指面向用户的文件
+- Object类似HDFS里的Block，一个文件会按固定大小分成多个Object或者Block。
+- OSD（Object Storage Device）负责数据块的物理存储，类似HDFS里的DataNode
+- PG（Placement Group）是一个逻辑概念。每个PG和OSD有明确的对应关系。
+  
+寻址过程对比：
+
+1. 文件到块的映射
+   CEPH和HDFS都有这一步映射。从块到物理存储的映射，两者区别就比较大了。HDFS是一个静态表，CEPH则采用CRUSH算法。
+1. 块映射到物理存储的问题
+   1. 将块ID做hash，映射到唯一的PG上。
+      因为这一步对PG数量非常敏感，所以对PG扩容是不太可能的。好在PG只是一个逻辑概念，一般部署时就已经确定了。
+   2. PGId通过CRUSH算法找到对应的物理存储及其备份的位置，OSD1、OSD2、OSD3。  
+
+
+CRUSH算法是CEPH做到真正分布式的关键。算法细节参考[http://www.ssrc.ucsc.edu/papers/weil-sc06.pdf](http://www.ssrc.ucsc.edu/papers/weil-sc06.pdf "http://www.ssrc.ucsc.edu/papers/weil-sc06.pdf")
