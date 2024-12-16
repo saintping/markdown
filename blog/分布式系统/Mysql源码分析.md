@@ -28,7 +28,7 @@ THD是连接的核心数据结构，里面有这个连接相关的所有上下�
 以上只是mysql启动的主流程，还有些分支流程就不展开了。比如WRITE_DELAY（先回复客户端再写入）、EMBEDDED_LIBRARY（嵌入库形式）、WIN（适配windows）等。
 
 ### 命令执行
-  新线程的处理代码在`sql\sql_connect.cc`，入口是do_handle_one_connection。
+新线程的处理代码在`sql\sql_connect.cc`，入口是do_handle_one_connection。
 ```cpp
 void do_handle_one_connection(THD *thd_arg){
   ......

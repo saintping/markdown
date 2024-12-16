@@ -29,97 +29,97 @@ Value里面嵌套的类型则非常丰富。
 
 - String
   字符串的定义在文件`src/sds.h`，可以看到Redis对内存的使用是很精细的，不同长度的字符串还分别使用了不同的结构。
-```c
-/* Note: sdshdr5 is never used, we just access the flags byte directly.
- * However is here to document the layout of type 5 SDS strings. */
-struct __attribute__ ((__packed__)) sdshdr5 {
-    unsigned char flags; /* 3 lsb of type, and 5 msb of string length */
-    char buf[];
-};
-struct __attribute__ ((__packed__)) sdshdr8 {
-    uint8_t len; /* used */
-    uint8_t alloc; /* excluding the header and null terminator */
-    unsigned char flags; /* 3 lsb of type, 5 unused bits */
-    char buf[];
-};
-struct __attribute__ ((__packed__)) sdshdr16 {
-    uint16_t len; /* used */
-    uint16_t alloc; /* excluding the header and null terminator */
-    unsigned char flags; /* 3 lsb of type, 5 unused bits */
-    char buf[];
-};
-struct __attribute__ ((__packed__)) sdshdr32 {
-    uint32_t len; /* used */
-    uint32_t alloc; /* excluding the header and null terminator */
-    unsigned char flags; /* 3 lsb of type, 5 unused bits */
-    char buf[];
-};
-struct __attribute__ ((__packed__)) sdshdr64 {
-    uint64_t len; /* used */
-    uint64_t alloc; /* excluding the header and null terminator */
-    unsigned char flags; /* 3 lsb of type, 5 unused bits */
-    char buf[];
-};
-```
+  ```c
+  /* Note: sdshdr5 is never used, we just access the flags byte directly.
+   * However is here to document the layout of type 5 SDS strings. */
+  struct __attribute__ ((__packed__)) sdshdr5 {
+      unsigned char flags; /* 3 lsb of type, and 5 msb of string length */
+      char buf[];
+  };
+  struct __attribute__ ((__packed__)) sdshdr8 {
+      uint8_t len; /* used */
+      uint8_t alloc; /* excluding the header and null terminator */
+      unsigned char flags; /* 3 lsb of type, 5 unused bits */
+      char buf[];
+  };
+  struct __attribute__ ((__packed__)) sdshdr16 {
+      uint16_t len; /* used */
+      uint16_t alloc; /* excluding the header and null terminator */
+      unsigned char flags; /* 3 lsb of type, 5 unused bits */
+      char buf[];
+  };
+  struct __attribute__ ((__packed__)) sdshdr32 {
+      uint32_t len; /* used */
+      uint32_t alloc; /* excluding the header and null terminator */
+      unsigned char flags; /* 3 lsb of type, 5 unused bits */
+      char buf[];
+  };
+  struct __attribute__ ((__packed__)) sdshdr64 {
+      uint64_t len; /* used */
+      uint64_t alloc; /* excluding the header and null terminator */
+      unsigned char flags; /* 3 lsb of type, 5 unused bits */
+      char buf[];
+  };
+  ```
 
 - List
   List是一个经典的双向列表`src\adlist.h`。
-```c
-typedef struct listNode {
-    struct listNode *prev;
-    struct listNode *next;
-    void *value;
-} listNode;
-typedef struct listIter {
-    listNode *next;
-    int direction;
-} listIter;
-typedef struct list {
-    listNode *head;
-    listNode *tail;
-    unsigned long len;
-} list;
-```
+  ```c
+  typedef struct listNode {
+      struct listNode *prev;
+      struct listNode *next;
+      void *value;
+  } listNode;
+  typedef struct listIter {
+      listNode *next;
+      int direction;
+  } listIter;
+  typedef struct list {
+      listNode *head;
+      listNode *tail;
+      unsigned long len;
+  } list;
+  ```
 
 - Hash
   一个字典类型Dict，内部实现为Hash Table。
 - Set
   根据存储数据的性质不同，内部可以是intSet，压缩数组listpack或者Dict。
   压缩数组就是元素长度不固定的数组，
-```c
-/* Each entry in the listpack is either a string or an integer. */
-typedef struct {
-    /* When string is used, it is provided with the length (slen). */
-    unsigned char *sval;
-    uint32_t slen;
-    /* When integer is used, 'sval' is NULL, and lval holds the value. */
-    long long lval;
-} listpackEntry;
-```
+  ```c
+  /* Each entry in the listpack is either a string or an integer. */
+  typedef struct {
+      /* When string is used, it is provided with the length (slen). */
+      unsigned char *sval;
+      uint32_t slen;
+      /* When integer is used, 'sval' is NULL, and lval holds the value. */
+      long long lval;
+  } listpackEntry;
+  ```
 
 - Sorted Set
   一般也称为ZSet，当数据量较小时使用压缩表listpack，否则使用跳跃表zskiplist和Dict。
-```c
-/* ZSETs use a specialized version of Skiplists */
-typedef struct zskiplistNode {
-    sds ele;
-    double score;
-    struct zskiplistNode *backward;
-    struct zskiplistLevel {
-        struct zskiplistNode *forward;
-        unsigned long span;
-    } level[];
-} zskiplistNode;
-typedef struct zskiplist {
-    struct zskiplistNode *header, *tail;
-    unsigned long length;
-    int level;
-} zskiplist;
-typedef struct zset {
-    dict *dict;
-    zskiplist *zsl;
-} zset;
-```
+  ```c
+  /* ZSETs use a specialized version of Skiplists */
+  typedef struct zskiplistNode {
+      sds ele;
+      double score;
+      struct zskiplistNode *backward;
+      struct zskiplistLevel {
+          struct zskiplistNode *forward;
+          unsigned long span;
+      } level[];
+  } zskiplistNode;
+  typedef struct zskiplist {
+      struct zskiplistNode *header, *tail;
+      unsigned long length;
+      int level;
+  } zskiplist;
+  typedef struct zset {
+      dict *dict;
+      zskiplist *zsl;
+  } zset;
+  ```
 
 Redis为了优化内存使用，是使用了很多奇技淫巧的。比如压缩列表（别的场合可能为了更快就采用一个固定大长度的数组了）和跳跃表（Java里有序字典就是Hash Table+链表的组合）。
 

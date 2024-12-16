@@ -535,3 +535,9 @@ public class FlinkTemperatureAverage {
 ### 数据源
 Flink支持的数据源有：文件系统、Kafka、RabbitMQ、JDBC数据库、Socket。
 还支持自定义数据源，只要实现SourceFunction和SinkFunction接口就可以了。
+
+### Flink CDC
+Flink CDC（Flink Change Data Capture）基于Flink框架，实现了对数据源变更数据的捕捉和处理。
+单独的开源项目[https://github.com/apache/flink-cdc](https://github.com/apache/flink-cdc "https://github.com/apache/flink-cdc")
+
+Flink CDC内置了CDC引擎debezium，通过监听binlog等使得捕捉数据的能力比基于SourceFunction的查询方案更加高效。debezium是可以作为服务独立部署的，只是Flink CDC将其作为插件内置进来了。
