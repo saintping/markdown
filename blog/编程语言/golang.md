@@ -100,12 +100,54 @@ continue     for          import       return       var
 这内容大部分都在这个文件里`src/runtime/runtime2.go`
 
 - 协程coroutine
-  大部分调度设计都有三个角色：调度，执行者和例程，golang也不例外。比如Linux内核中：执行者是cpu，调度是schedule，例程是task；golang和Java的协程结构非常类似：执行者是系统线程，调度是schedule，例程是coroutine；但是golang开启协程非常简单，在任何函数调用前go即可。
+  大部分调度设计都有三个角色：调度P，执行者M和例程G，golang也不例外。比如Linux内核中：执行者是cpu，调度是schedule，例程是task；golang和Java的协程结构非常类似：执行者是系统线程，调度是schedule，例程是coroutine；但是golang开启协程非常简单，在任何函数调用前go即可。
+  go关键字在运行期对应的是newproc，创建一个g放到一个全局队列中等待调度。每个执行者有他自己本地Steal模式的队列。
+  ```go
+  // Create a new g running fn.
+  // Put it on the queue of g's waiting to run.
+  // The compiler turns a go statement into a call to this.
+  func newproc(fn *funcval) {
+  	gp := getg()
+  	pc := sys.GetCallerPC()
+  	systemstack(func() {
+  		newg := newproc1(fn, gp, pc, false, waitReasonZero)
+  
+  		pp := getg().m.p.ptr()
+  		runqput(pp, newg, true)
+  
+  		if mainStarted {
+  			wakep()
+  		}
+  	})
+  }
+  ```
   ![https://ping666.com/wp-content/uploads/2024/12/goroutine.webp](https://ping666.com/wp-content/uploads/2024/12/goroutine.webp "goroutine.webp")
 
 - 通道channel
-  如果是一个channel，可以认为是一个语法糖。但是多个channel配合select，威力就大了。
-
+  如果是一个channel，可以认为是一个FIFO队列的语法糖。但是多个channel配合select，支持类似多路复用的逻辑，威力就大了。
+  ```go
+  var a []int
+  var c, c1, c2, c3, c4 chan int
+  var i1, i2 int
+  select {
+  case i1 = <-c1:
+  	print("received ", i1, " from c1\n")
+  case c2 <- i2:
+  	print("sent ", i2, " to c2\n")
+  case i3, ok := (<-c3):  // same as: i3, ok := <-c3
+  	if ok {
+  		print("received ", i3, " from c3\n")
+  	} else {
+  		print("c3 is closed\n")
+  	}
+  case a[f()] = <-c4:
+  	// same as:
+  	// case t := <-c4
+  	//	a[f()] = t
+  default:
+  	print("no communication\n")
+  }
+  ```
 - 延迟调用defer
   在函数执行完成，return之前（严谨一点来说是ret指令）执行的函数。有点类似Java里finally的味道。可以定义多个构成一个列表，后进先出。
   ```go
@@ -153,6 +195,8 @@ continue     for          import       return       var
   }
   ```
 
+- GC
+  Golang的GC和Java的G1大致相当，STW/可达性分析/mark-sweep/三色标记/读写屏障/并发回收这些都有，但是还没有精细到ZGC/shenandoah。
 
 ### 工程化
 golang对工程化的专注，暴打Java和C++。
