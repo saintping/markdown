@@ -36,11 +36,13 @@ k8s在1.24版本移除了dockershim后，缩短了调用路径kubelet -> contain
   | 主机名 | 作用 | 资源 | IP | Host转发端口 | 其他 |
   | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- |
   | k8s-master | 控制平面 | 2C8G | 10.0.2.10 | 10022 |
-  | k8s-node1 | Node1 | 1C2G | 10.0.2.11 | 10122 |
-  | k8s-node2 | Node2 | 1C2G | 10.0.2.12 | 10222 |
-  | k8s-node3 | Node3 | 1C2G | 10.0.2.13 | 10322 |
+  | k8s-node1 | Node1 | 1C4G | 10.0.2.11 | 10122 |
+  | k8s-node2 | Node2 | 1C4G | 10.0.2.12 | 10222 |
+  | k8s-node3 | Node3 | 1C4G | 10.0.2.13 | 10322 |
   | k8s-registry | 本地仓库 | 1C2G | 10.0.2.99 | 19922 | 仓库端口5000 |
   
+  Node节点的内存偏大是为了后面部署Java应用。
+
 - 机器初始化
   每台虚拟机都需要做如下初始化。
   1. 设置hosts和主机名
@@ -167,7 +169,7 @@ k8s在1.24版本移除了dockershim后，缩短了调用路径kubelet -> contain
    [host."https://registry.docker-cn.com"]
      capabilities = ["pull", "resolve"]
    ```
-   ctr是containerd的客户端，和docker客户端功能几乎一致，有基本的对应关系，只是用起来不很方便。
+   ctr是containerd的客户端，和docker客户端功能几乎一致，但是很少用。
    可以通过`ctr images pull registry.aliyuncs.com/google_containers/pause:3.9`检查是否配置成功。
    注意：普通的Docker安装不需要这一步，将containerd作为k8s的运行时才需要。有了CRI插件后，已经不需要独立安装cri-dockerd了。
 4. 启动docker
@@ -384,7 +386,8 @@ k8s支持很多种运行时，其中之一是docker contianerd，端点为`unix:
    ```
 4. 安装网络插件flannel
    上面的coredns是Pending状态，需要安装网络插件。
-   这里选择Flannel（因为简单）。Calico支持更多高级设置，Cillium使用了eBPF。
+   这里选择Flannel（因为简单）。Calico支持更多高级设置，Cillium使用了eBPF。k8s的网络规范，对网络插件的要求见[https://kubernetes.io/docs/concepts/services-networking](https://kubernetes.io/docs/concepts/services-networking "https://kubernetes.io/docs/concepts/services-networking")
+   
    ```bash
    # 从github下载镜像flannel/flannel到私有仓库
    wget https://github.com/flannel-io/flannel/releases/download/v0.26.2/flanneld-v0.26.2-amd64.docker
@@ -399,7 +402,11 @@ k8s支持很多种运行时，其中之一是docker contianerd，端点为`unix:
    wget https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
    kubectl apply -f kube-flannel.yml # 将这个文件里的源对应替换掉成私有仓库之后执行
    ```
-   flannel清理
+
+   kube-flannel.yml里使用的vxlan组网模式。
+   创建的资源有：kube-flannel（Namespace），flannel（ServiceAccount），flannel（ClusterRole），kube-flannel-cfg（ConfigMap），kube-flannel-ds（DaemonSet）。
+
+   集群重新初始化时，flannel以及cni网络也需要清理
    ```bash
    kubectl delete -f kube-flannel.yml
    ip link set cni0 down
@@ -412,15 +419,128 @@ k8s支持很多种运行时，其中之一是docker contianerd，端点为`unix:
    iptables -t nat -F
    ```
 
-安装完网络插件后的集群状态
+集群安装完毕后的状态
 ```bash
-[root@k8s-master kubelet.service.d]# kubectl get nodes
-NAME         STATUS   ROLES           AGE     VERSION
-k8s-master   Ready    control-plane   162m    v1.28.2
-k8s-node1    Ready    <none>          8m46s   v1.28.2
-k8s-node2    Ready    <none>          7m56s   v1.28.2
-k8s-node3    Ready    <none>          7m40s   v1.28.2
+[root@k8s-master ~]# kubectl get nodes
+NAME         STATUS   ROLES           AGE   VERSION
+k8s-master   Ready    control-plane   16h   v1.28.2
+k8s-node1    Ready    <none>          13h   v1.28.2
+k8s-node2    Ready    <none>          13h   v1.28.2
+k8s-node3    Ready    <none>          13h   v1.28.2
+[root@k8s-master ~]# ip route
+default via 10.0.2.1 dev enp0s3 proto static metric 100
+10.0.2.0/24 dev enp0s3 proto kernel scope link src 10.0.2.10 metric 100 # enp0s3物理接口
+10.244.0.0/24 dev cni0 proto kernel scope link src 10.244.0.1 # cni接口
+10.244.1.0/24 via 10.244.1.0 dev flannel.1 onlink # flannel子网
+10.244.2.0/24 via 10.244.2.0 dev flannel.1 onlink # flannel子网
+10.244.3.0/24 via 10.244.3.0 dev flannel.1 onlink # flannel子网
+172.17.0.0/16 dev docker0 proto kernel scope link src 172.17.0.1 linkdown # docker网桥
 ```
+
+
+### 部署应用
+
+##### 部署无状态服务Deployment
+通过私有仓库部署一个nginx应用。配置亲和度使其尽量分配到不同的Node节点上。
+```bash
+[root@k8s-master ~]# kubectl apply -f nginx-deployment.yaml
+deployment.apps/nginx-deployment configured
+[root@k8s-master ~]# cat nginx-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+spec:
+  selector:
+    matchLabels:
+      app: nginx
+  replicas: 2 # 副本个数
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: registry.x.com:5000/nginx:latest # 私有仓库
+        ports:
+        - containerPort: 80
+      affinity:
+        nodeAffinity: # 节点亲和度
+          requiredDuringSchedulingIgnoredDuringExecution: # 强制
+            nodeSelectorTerms:
+            - matchExpressions: # amd64机器的节点
+              - key: kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+        podAntiAffinity: # pod反亲和性
+          preferredDuringSchedulingIgnoredDuringExecution: # 软强制
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions: # master之外的其他节点
+                - key: kubernetes.io/hostname
+                  operator: NotIn
+                  values:
+                  - k8s-master
+              topologyKey: kubernetes.io/hostname
+```
+
+通过`curl http://10.244.3.2`或者`curl http://10.244.2.3`可以访问Nginx服务。
+注意在k8s-registry机器上是访问不到的，因为它没有加入集群，不属于k8s网络。
+
+##### 对外暴露service
+```bash
+kubectl apply -f nginx-service.yaml
+service/nginx-service configured
+[root@k8s-master k8s]# cat nginx-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-service
+spec:
+  selector:
+    app: nginx
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80 # 暴露服务端口
+      targetPort: 80 # 后端nginx-deployment端口
+```
+通过`curl -v http://10.108.49.219`访问服务，可以看到是负载均衡到后台Nginx服务的。
+
+##### 当前集群状态
+```bash
+[root@k8s-master ~]# kubectl get services -A -o wide
+NAMESPACE     NAME            TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)                  AGE   SELECTOR
+default       kubernetes      ClusterIP   10.96.0.1       <none>        443/TCP                  19h   <none>
+default       nginx-service   ClusterIP   10.108.49.219   <none>        80/TCP                   16m   app=nginx
+kube-system   kube-dns        ClusterIP   10.96.0.10      <none>        53/UDP,53/TCP,9153/TCP   19h   k8s-app=kube-dns
+[root@k8s-master ~]# kubectl get deployments -A -o wide
+NAMESPACE     NAME               READY   UP-TO-DATE   AVAILABLE   AGE   CONTAINERS   IMAGES                                                  SELECTOR
+default       nginx-deployment   2/2     2            2           16h   nginx        registry.x.com:5000/nginx:latest                        app=nginx
+kube-system   coredns            2/2     2            2           19h   coredns      registry.x.com:5000/google_containers/coredns:v1.10.1   k8s-app=kube-dns
+[root@k8s-master ~]# kubectl get pods -A -o wide
+NAMESPACE      NAME                                 READY   STATUS    RESTARTS       AGE     IP           NODE         NOMINATED NODE   READINESS GATES
+default        nginx-deployment-7bf65ddb84-95rjq    1/1     Running   0              6m23s   10.244.3.2   k8s-node3    <none>           <none>
+default        nginx-deployment-7bf65ddb84-98z6n    1/1     Running   0              6m31s   10.244.2.3   k8s-node2    <none>           <none>
+kube-flannel   kube-flannel-ds-6bskk                1/1     Running   1 (139m ago)   15h     10.0.2.10    k8s-master   <none>           <none>
+kube-flannel   kube-flannel-ds-wnspn                1/1     Running   1 (138m ago)   15h     10.0.2.13    k8s-node3    <none>           <none>
+kube-flannel   kube-flannel-ds-x9hwb                1/1     Running   1 (138m ago)   15h     10.0.2.11    k8s-node1    <none>           <none>
+kube-flannel   kube-flannel-ds-z7bpc                1/1     Running   1 (139m ago)   15h     10.0.2.12    k8s-node2    <none>           <none>
+kube-system    coredns-66977f494-2jjgs              1/1     Running   1 (138m ago)   15h     10.244.1.8   k8s-node1    <none>           <none>
+kube-system    coredns-66977f494-hm2qc              1/1     Running   1 (139m ago)   18h     10.244.0.3   k8s-master   <none>           <none>
+kube-system    etcd-k8s-master                      1/1     Running   7 (139m ago)   18h     10.0.2.10    k8s-master   <none>           <none>
+kube-system    kube-apiserver-k8s-master            1/1     Running   7 (139m ago)   18h     10.0.2.10    k8s-master   <none>           <none>
+kube-system    kube-controller-manager-k8s-master   1/1     Running   12 (27m ago)   18h     10.0.2.10    k8s-master   <none>           <none>
+kube-system    kube-proxy-8j9wh                     1/1     Running   2 (139m ago)   18h     10.0.2.10    k8s-master   <none>           <none>
+kube-system    kube-proxy-9mlg7                     1/1     Running   1 (138m ago)   15h     10.0.2.13    k8s-node3    <none>           <none>
+kube-system    kube-proxy-ptt4g                     1/1     Running   1 (139m ago)   15h     10.0.2.12    k8s-node2    <none>           <none>
+kube-system    kube-proxy-tx692                     1/1     Running   1 (138m ago)   15h     10.0.2.11    k8s-node1    <none>           <none>
+kube-system    kube-scheduler-k8s-master            1/1     Running   19 (27m ago)   18h     10.0.2.10    k8s-master   <none>           <none>
+```
+
 
 ### 其他
 
@@ -436,9 +556,13 @@ k8s-node3    Ready    <none>          7m40s   v1.28.2
   `kubectl describe pod -n kube-flannel kube-flannel-ds-pnzx4`
 - 查看容器
   ```bash
-  crictl ps
-  crictl info 73deb9a3f7025
-  crictl logs -f bc0c3ff985a57
+  crictl pods # pod列表
+  crictl statsp # pod资源使用
+  crictl inspectp 932e5f7017ae3 # 容器详情  
+  crictl ps # 容器列表
+  crictl stats # 容器资源使用
+  crictl inspect eb5b29d988e9d # 容器详情
+  crictl logs -f bc0c3ff985a57 # 容器日志
   ```
 - kubeadm是怎么控制kubelet的？
   kubeadm会将kubelet需要的信息写到配置文件中，然后重启它。
