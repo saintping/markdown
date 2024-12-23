@@ -492,30 +492,36 @@ spec:
 
 ##### 对外暴露service
 ```bash
-kubectl apply -f nginx-service.yaml
+[root@k8s-master ~]# kubectl apply -f nginx-service.yaml
 service/nginx-service configured
-[root@k8s-master k8s]# cat nginx-service.yaml
+[root@k8s-master ~]# cat nginx-service.yaml
 apiVersion: v1
 kind: Service
 metadata:
   name: nginx-service
 spec:
+  type: NodePort # 默认类型是ClusterIP，分配一个集群虚拟IP比如10.108.49.219，这种IP只能集群内访问。还需要GatewayAPI的配合
   selector:
     app: nginx
-  ports:
+  ports: # 支持暴露为多个端口
     - name: http
       protocol: TCP
       port: 80 # 暴露服务端口
       targetPort: 80 # 后端nginx-deployment端口
+      nodePort: 30000 # 控制平面默认分配范围：30000-32767
 ```
-通过`curl -v http://10.108.49.219`访问服务，可以看到是负载均衡到后台Nginx服务的。
+NodePort类型的Service可以通过任何一个集群主机的IP访问（kubelet-proxy的转发作用）。比如
+```bash
+curl -v http://10.0.2.10:30000 # master机器
+curl -v http://10.0.2.13:30000 # 任一节点机器
+```
 
 ##### 当前集群状态
 ```bash
 [root@k8s-master ~]# kubectl get services -A -o wide
 NAMESPACE     NAME            TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)                  AGE   SELECTOR
 default       kubernetes      ClusterIP   10.96.0.1       <none>        443/TCP                  19h   <none>
-default       nginx-service   ClusterIP   10.108.49.219   <none>        80/TCP                   16m   app=nginx
+default       nginx-service   NodePort    10.108.49.219   <none>        80:30000/TCP             3h    app=nginx
 kube-system   kube-dns        ClusterIP   10.96.0.10      <none>        53/UDP,53/TCP,9153/TCP   19h   k8s-app=kube-dns
 [root@k8s-master ~]# kubectl get deployments -A -o wide
 NAMESPACE     NAME               READY   UP-TO-DATE   AVAILABLE   AGE   CONTAINERS   IMAGES                                                  SELECTOR
