@@ -369,7 +369,7 @@ k8s支持很多种运行时，其中之一是docker contianerd，端点为`unix:
    kube-system    kube-scheduler-k8s-master            1/1     Running                 3 (10m ago)   147m
    ```
    `kubeadm init`会生成各种配置文件如`/var/lib/kubelet/config.yaml`，失败后停止kubelet，重复执行以上动作。
-   重置初始化，停止所有服务使用`kubeadm reset -f` 
+   重置初始化，每个节点都需要停止所有服务使用`kubeadm reset -f`。如果是涉及到网络插件的删除，注意清理相关内容，并且最好重启机器。
 3. Node节点加入集群
    ```bash
    kubeadm join 10.0.2.10:6443 \
@@ -558,13 +558,30 @@ kube-system    kube-scheduler-k8s-master            1/1     Running   19 (27m ag
   ```
 - 查看kubelet日志
   `journalctl -u kubelet -f`
-- 查看pod内容
-  `kubectl describe pod -n kube-flannel kube-flannel-ds-pnzx4`
-- 查看容器
+- 登录账号
+  ```bash
+  mkdir -p ~/.kube
+  cp -i /etc/kubernetes/admin.conf ~/.kube/config
+  chown $(id -u):$(id -g) $HOME/.kube/config
+  kubectl config get-contexts # 当前登录的上下文
+  ```
+- kubectl常用命令
+  ```bash
+  kubectl describe pod -n kube-flannel kube-flannel-ds-pnzx4 # 查看pod描述
+  kubectl logs -n kube-flannel kube-flannel-ds-pnzx4 # 查看pod日志
+  kubectl get networkpolicies -n monitoring # 网络策略
+  kubectl get events -n monitoring # 事件
+  kubectl get serviceaccounts -A # 账号
+  kubectl get clusterroles -A # 集群角色，名字空间下的对应为roles，下同
+  kubectl get clusterrolbeindings -A # 集群角色绑定关系
+  kubectl get clusterrolebindings -A # 集群角色绑定关系
+  kubectl describe clusterrole -n system system:kube-scheduler # 集群角色的权限列表
+  ```
+- crictl常用命令
   ```bash
   crictl pods # pod列表
   crictl statsp # pod资源使用
-  crictl inspectp 932e5f7017ae3 # 容器详情  
+  crictl inspectp 932e5f7017ae3 # pod详情
   crictl ps # 容器列表
   crictl stats # 容器资源使用
   crictl inspect eb5b29d988e9d # 容器详情
